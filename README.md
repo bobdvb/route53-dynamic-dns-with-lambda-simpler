@@ -72,10 +72,34 @@ git clone https://github.com/awslabs/route53-dynamic-dns-with-lambda.git
 cd route53-dynamic-dns-with-lambda
 ```
 
-Install Python requirements:
+Install Python requirements using a virtual environment (recommended):
 
 ```bash
-pip3 install -r requirements.txt
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install requirements
+pip install -r requirements.txt
+```
+
+**Alternative:** If you prefer not to use a virtual environment:
+
+```bash
+# Install with --user flag
+pip3 install --user -r requirements.txt
+```
+
+**Troubleshooting:** If you get `ModuleNotFoundError: No module named 'aws_cdk'`:
+
+```bash
+# Verify installation
+pip3 show aws-cdk-lib
+
+# If package not found, try:
+sudo pip3 install -r requirements.txt
+
+# Or use virtual environment (see above)
 ```
 
 If CDK was never used in your deployment account, bootstrap it for CDK:
