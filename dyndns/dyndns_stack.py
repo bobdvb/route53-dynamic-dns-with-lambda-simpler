@@ -45,7 +45,7 @@ class DyndnsStack(cdk.Stack):
 
 
         fn = lambda_.Function(self, "dyndns_fn",
-            runtime=lambda_.Runtime.PYTHON_3_13,
+            runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=lambda_.Architecture.ARM_64,
             handler="index.lambda_handler",
             code=lambda_.Code.from_asset("lambda"),
