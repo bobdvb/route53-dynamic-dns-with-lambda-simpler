@@ -16,35 +16,80 @@ The Lambda IAM Role will have the following permissions in addition to the stand
 
 - Route53 List and Change record set
 
-To deploy the CDK stack to an AWS account is suggested to use a CloudShell session: 
+## Deployment
+
+### Option 1: AWS CloudShell (Recommended for Quick Start)
+
+AWS CloudShell provides a pre-configured environment with AWS CLI, Python, and other tools already installed:
 https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html
 
+### Option 2: Ubuntu/Debian Linux
+
+#### Prerequisites
+
+Install required packages:
+
+```bash
+# Update package list
+sudo apt update
+
+# Install Python, pip, and Node.js
+sudo apt install -y python3 python3-pip python3-venv nodejs npm git
+
+# Install perl-Digest-SHA for testing DNS updates with dyndns.sh
+sudo apt install -y libdigest-sha-perl
+
+# Install AWS CDK CLI globally
+sudo npm install -g aws-cdk
+
+# Verify installations
+python3 --version
+node --version
+npm --version
+cdk --version
+```
+
+#### Configure AWS CLI
+
+If you haven't configured AWS CLI yet:
+
+```bash
+# Install AWS CLI
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+# Configure credentials
+aws configure
+```
+
+#### Deploy the Stack
+
 Clone this repository:
->` git clone https://github.com/awslabs/route53-dynamic-dns-with-lambda.git`
+
+```bash
+git clone https://github.com/awslabs/route53-dynamic-dns-with-lambda.git
+cd route53-dynamic-dns-with-lambda
+```
 
 Install Python requirements:
 
-> `pip install -r requirements.txt`
+```bash
+pip3 install -r requirements.txt
+```
 
-To test DNS record update on the CloudShell session `perl-Digest-SHA` must be installed to add the `shasum` package.
- ```
- sudo yum update
- sudo yum install perl-Digest-SHA
- ```
-
-If CDK was never used in the deployment account bootstrap it for CDK:
+If CDK was never used in your deployment account, bootstrap it for CDK:
 https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html
 
-> `cdk bootstrap`
+```bash
+cdk bootstrap
+```
 
-If you get an error about CDK CLI not being up to date run the following:
-> `sudo npm install -g aws-cdk`
+Deploy the stack:
 
-> Then retry `ckd bootstrap`
-
-Deploy the stack
-
-> `cdk deploy`
+```bash
+cdk deploy
+```
 
 ## Configuration
 
