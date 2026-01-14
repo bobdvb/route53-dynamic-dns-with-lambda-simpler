@@ -1,7 +1,6 @@
 import time
 import boto3
 route53 = boto3.client('route53')
-dynamodb = boto3.client('dynamodb')
 awslambda = boto3.client('lambda')
 cloudformation = boto3.client('cloudformation')
 
@@ -18,15 +17,17 @@ except:
     exit()
 
 
-# Get dynamodb table name and Lambda Function URL
+# Get Lambda Function name
 resources = cloudformation.list_stack_resources(StackName='DyndnsStack')
+lambdafn = None
 for resource in resources['StackResourceSummaries']:
-    if resource['ResourceType'] == 'AWS::DynamoDB::Table':
-        table = resource['PhysicalResourceId']
     if resource['ResourceType'] == 'AWS::Lambda::Function':
         lambdafn = resource['PhysicalResourceId']
-    else:
-        pass
+        break
+
+if not lambdafn:
+    print("Lambda function not found in stack.")
+    exit()
 
 lambdaurl = awslambda.get_function_url_config(
     FunctionName=lambdafn)['FunctionUrl']
@@ -109,33 +110,45 @@ print('#                                            #')
 print('##############################################')
 confirm=input()
 if confirm == 'y':
-    # Write configuration in dynamodb
-    print('\nSaving configuration...')
+    # Update Lambda environment variables
+    print('\nUpdating Lambda environment variables...')
     try:
-        dynamodb.put_item(
-            TableName= table,
-            Item = {
-                'hostname': {
-                    'S': hostname
-                },
-                'data': {
-                    'S': '{"route_53_zone_id": "'+hzid+'","route_53_record_ttl": '+str(ttl)+',"shared_secret": "'+secret+'"}'
-                }
-            }
+        # Get current environment variables
+        lambda_config = awslambda.get_function_configuration(FunctionName=lambdafn)
+        current_env = lambda_config.get('Environment', {}).get('Variables', {})
+
+        # Update with new configuration
+        current_env['ROUTE53_ZONE_ID'] = hzid
+        current_env['ROUTE53_RECORD_TTL'] = str(ttl)
+        current_env['SHARED_SECRET'] = secret
+
+        # Update the Lambda function
+        awslambda.update_function_configuration(
+            FunctionName=lambdafn,
+            Environment={'Variables': current_env}
         )
+
         print('Configuration saved.\n')
         print('#####################################################')
         print('#                                                   #')
         print('# The Serverless Dynamic DNS solution is now ready. #')
         print('#                                                   #')
         print('#####################################################')
+        print('\nConfiguration details:')
+        print('  Hosted zone ID: ' + hzid)
+        print('  Record TTL: ' + str(ttl))
+        print('  Validation mode: ' + current_env.get('VALIDATION_MODE', 'wildcard'))
+        if current_env.get('VALIDATION_MODE', 'wildcard') == 'wildcard':
+            print('  Allowed pattern: ' + current_env.get('ALLOWED_PATTERN', ''))
+        else:
+            print('  Allowed domains: ' + current_env.get('ALLOWED_DOMAINS', ''))
         print(
             '\n'+hostname+' can be updated with the following command:')
         print("./dyndns.sh -m set -u "+lambdaurl +
               " -h "+hostname+" -s "+secret)
         print('\n##########################################################################################\n')
-    except:
-        print("Could not save configuration.")
+    except Exception as e:
+        print("Could not save configuration: " + str(e))
         exit()
 else:
     print('Aborting.')

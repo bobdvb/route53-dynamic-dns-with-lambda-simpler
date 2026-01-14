@@ -11,29 +11,47 @@ import os
 from botocore.exceptions import ClientError
 
 '''
-This function pulls the json config data from DynamoDB and returns a python dictionary.
-It is called by the run_set_mode function.
+This function validates the hostname against configured allowed domains.
+Supports two modes:
+- hardcoded: Exact match against comma-separated list in ALLOWED_DOMAINS
+- wildcard: Regex pattern match against ALLOWED_PATTERN
+Returns True if hostname is allowed, False otherwise.
 '''
-def read_config(key_hostname):
-    # Define the dynamoDB client
-    dynamodb = boto3.client("dynamodb")
-    # Retrieve data based on key_hostname
-    response = dynamodb.get_item(
-        TableName=os.environ.get("ddns_config_table"),
-        Key={'hostname': {'S': key_hostname}}
-    )
-    # Return the json as a dictionary.
-    return json.loads(response["Item"]["data"]["S"])
+def validate_hostname(hostname):
+    validation_mode = os.environ.get("VALIDATION_MODE", "wildcard").lower()
+
+    if validation_mode == "hardcoded":
+        # Get comma-separated list of allowed domains
+        allowed_domains_str = os.environ.get("ALLOWED_DOMAINS", "")
+        if not allowed_domains_str:
+            return False
+
+        # Split and strip whitespace from each domain
+        allowed_domains = [d.strip() for d in allowed_domains_str.split(",")]
+
+        # Check for exact match (case-insensitive)
+        return hostname.lower() in [d.lower() for d in allowed_domains]
+
+    elif validation_mode == "wildcard":
+        # Get regex pattern for allowed domains
+        allowed_pattern = os.environ.get("ALLOWED_PATTERN", r"^[a-z0-9\-]+\.dyn\.orbit\.me\.uk$")
+
+        # Match hostname against pattern
+        return bool(re.match(allowed_pattern, hostname.lower()))
+
+    else:
+        # Unknown validation mode
+        return False
 
 '''
-    This function takes the python dictionary returned from read_configThis function defines the interaction with Route 53.
-    It is called by the run_set_mode function.
-    @param execution_mode defines whether to set or get a DNS record
-    @param route_53_zone_id defines the id for the DNS zone
-    @param route_53_record_name defines the record, ie www.acme.com.
-    @param route_53_record_ttl defines defines the DNS record TTL
-    @param route_53_record_type defines record type, should always be 'a'
-    @param public_ip defines the current public ip of the client
+This function defines the interaction with Route 53.
+It is called by the run_set_mode function.
+@param execution_mode defines whether to set or get a DNS record
+@param route_53_zone_id defines the id for the DNS zone
+@param route_53_record_name defines the record, ie www.acme.com.
+@param route_53_record_ttl defines defines the DNS record TTL
+@param route_53_record_type defines record type, should always be 'a'
+@param public_ip defines the current public ip of the client
 '''
 def route53_client(execution_mode, route_53_zone_id,
                    route_53_record_name, route_53_record_ttl,
@@ -99,26 +117,25 @@ If not it calls route53_client to set the DNS record to the current IP.
 It is called by the main lambda_handler function.
 '''
 def run_set_mode(ddns_hostname, validation_hash, source_ip):
-    # Try to read the config, and error if you can't.
-    try:
-        full_config=read_config(ddns_hostname)
-    except:
-        return_status='fail'
-        return_message='There was an issue finding '\
-            'or reading '+ddns_hostname+' configuration from dynamoDB table: ' + \
-            os.environ.get("ddns_config_table")
+    # Validate that the hostname is allowed
+    if not validate_hostname(ddns_hostname):
+        return_status = 'fail'
+        return_message = 'Hostname ' + ddns_hostname + ' is not allowed. Domain validation failed.'
         return [403, {'return_status': return_status,
                 'return_message': return_message}]
 
-    # Get the section of the config related to the requested hostname.
-    record_config_set=full_config  # [ddns_hostname]
-    # the Route 53 Zone you created for the script
-    route_53_zone_id=record_config_set['route_53_zone_id']
-    # record TTL (Time To Live) in seconds tells DNS servers how long to cache
-    # the record.
-    route_53_record_ttl=record_config_set['route_53_record_ttl']
-    route_53_record_type="A"
-    shared_secret=record_config_set['shared_secret']
+    # Read configuration from environment variables
+    route_53_zone_id = os.environ.get("ROUTE53_ZONE_ID")
+    route_53_record_ttl = int(os.environ.get("ROUTE53_RECORD_TTL", "60"))
+    route_53_record_type = "A"
+    shared_secret = os.environ.get("SHARED_SECRET")
+
+    # Validate required environment variables
+    if not route_53_zone_id or not shared_secret:
+        return_status = 'fail'
+        return_message = 'Server configuration error: Missing required environment variables'
+        return [500, {'return_status': return_status,
+                'return_message': return_message}]
 
     # Validate that the client passed a sha256 hash
     # regex checks for a 64 character hex string.

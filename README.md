@@ -9,13 +9,11 @@ This repository contains all the required code to deploy a Serverless Dynamic DN
 CDK will manage the deployment of the following resources:
 
 - Lambda Function
-- DynamoDB Table
 - Lambda Function IAM Role
 
 The Lambda function will be configured with a FunctionURL for PUBLIC invocation.
 The Lambda IAM Role will have the following permissions in addition to the standard Lambda role:
 
-- READ (all actions) for the deployed DynamoDB Table
 - Route53 List and Change record set
 
 To deploy the CDK stack to an AWS account is suggested to use a CloudShell session: 
@@ -50,20 +48,32 @@ Deploy the stack
 
 ## Configuration
 
+### Domain Validation
+
+The solution supports two domain validation modes configured via Lambda environment variables:
+
+**Wildcard Mode** (default):
+- Uses regex pattern matching to validate hostnames
+- Default pattern: `^[a-z0-9\-]+\.dyn\.orbit\.me\.uk$`
+- Allows any subdomain under the specified pattern
+- Configure via `VALIDATION_MODE=wildcard` and `ALLOWED_PATTERN` environment variables
+
+**Hardcoded Mode**:
+- Validates against an exact list of allowed domains
+- Configure via `VALIDATION_MODE=hardcoded` and `ALLOWED_DOMAINS` (comma-separated) environment variables
+
 ### Route53 Hosted zone and record set
 
-A Route53 Hosted Zone (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zones-working-with.html) is required to update the hostname, the Hosted Zone ID must be included in the configuration and stored in the deployed DynamoDB table using the hostname as key and in the _data_ attribute the following JSON object ([Sample configuration](www.example.com.json)):
+A Route53 Hosted Zone (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zones-working-with.html) is required to update the hostname. The configuration is now stored in Lambda environment variables instead of DynamoDB:
 
-```JSON
-{
-  "route_53_zone_id": "XYZ1234567890",
-  "route_53_record_ttl": 60,
-  "shared_secret": "SHARED_SECRET_1"
-}
-```
+- `ROUTE53_ZONE_ID`: The Route53 Hosted Zone ID (e.g., "XYZ1234567890")
+- `ROUTE53_RECORD_TTL`: DNS record TTL in seconds (default: 60)
+- `SHARED_SECRET`: Shared secret for hash validation
+- `VALIDATION_MODE`: "wildcard" or "hardcoded"
+- `ALLOWED_PATTERN`: Regex pattern for wildcard mode
+- `ALLOWED_DOMAINS`: Comma-separated list for hardcoded mode
 
-To facilitate the configuration process execute the included [newrecord.py](newrecord.py) Python script.
-(Execute this script for each hostname to be configured)
+To facilitate the configuration process execute the included [newrecord.py](newrecord.py) Python script:
 
 > `python3 newrecord.py`
 
@@ -107,7 +117,7 @@ If the default configuration is correct, just press `Enter` to continue, if not 
 
 ### Shared secret
 
-The next prompt will ask to type a shared secret and confirm it. The shared secret will be saved in the JSON configuration and hashed when invoking the Lambda function. Lambda will read the shared secret from DynamoDB and hash it to validate the request is authorized. For example here `SHARED_SECRET_123` is provided.
+The next prompt will ask to type a shared secret and confirm it. The shared secret will be saved in the Lambda environment variables and hashed when invoking the Lambda function. Lambda will read the shared secret from its environment and hash it to validate the request is authorized. For example here `SHARED_SECRET_123` is provided.
 
 ```bash
 Enter the secret for the new record set.
